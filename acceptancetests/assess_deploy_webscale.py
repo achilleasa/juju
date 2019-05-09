@@ -329,6 +329,11 @@ def main(argv=None):
         raw_logs = extract_module_logs(client, module=args.logging_module)
         txn_metrics = extract_txn_metrics(raw_logs, module=args.logging_module)
 
+        use_sst = args.with_mongo_server_side_txns is True
+        log_file = 'sstxn.log' if use_sst is True else 'no-sstxn.log'
+        with open(log_file, 'a') as f:
+            f.write(raw_logs)
+
         # Calculate the timings to forward to the datastore
         metrics = construct_metrics(txn_metrics, (time.time() - begin))
         log.info("Metrics for deployment: {}".format(metrics))
@@ -348,9 +353,9 @@ def main(argv=None):
                 "mongo-profile": mongo_profile,
                 "mongo-ss-txns": "true" if use_sst else "false",
             })
+            log.info("Metrics successfully sent to report storage")
         except Exception:
-            raise JujuAssertionError("Error reporting metrics")
-        log.info("Metrics successfully sent to report storage")
+            log.error("error reporting metrics")
     return 0
 
 

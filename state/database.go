@@ -4,8 +4,11 @@
 package state
 
 import (
+	"encoding/json"
+	"fmt"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/juju/clock"
 	"github.com/juju/errors"
@@ -259,6 +262,8 @@ type database struct {
 
 	// clock is used to time how long transactions take to run
 	clock clock.Clock
+
+	txnMap sync.Map
 }
 
 // RunTransactionObserverFunc is the type of a function to be called
@@ -353,11 +358,13 @@ func (db *database) TransactionRunner() (runner jujutxn.Runner, closer SessionCl
 		observer := func(t jujutxn.Transaction) {
 			txnLogger.Tracef("ran transaction in %.3fs (retries: %d) %# v\nerr: %v",
 				t.Duration.Seconds(), t.Attempt, pretty.Formatter(t.Ops), t.Error)
+			logTxnSummary(t)
 		}
 		if db.runTransactionObserver != nil {
 			observer = func(t jujutxn.Transaction) {
 				txnLogger.Tracef("ran transaction in %.3fs (retries: %d) %# v\nerr: %v",
 					t.Duration.Seconds(), t.Attempt, pretty.Formatter(t.Ops), t.Error)
+				logTxnSummary(t)
 				db.runTransactionObserver(
 					db.raw.Name, db.modelUUID,
 					t.Ops, t.Error,
@@ -415,4 +422,32 @@ func (db *database) Run(transactions jujutxn.TransactionSource) error {
 // Schema is part of the Database interface.
 func (db *database) Schema() CollectionSchema {
 	return db.schema
+}
+
+func logTxnSummary(t jujutxn.Transaction) {
+	le := struct {
+		C    string
+		ID   string
+		Type string
+	}{}
+
+	for _, op := range t.Ops {
+		le.C = op.C
+		le.ID = fmt.Sprint(op.Id)
+		if op.Insert != nil {
+			le.Type = "I"
+		} else if op.Update != nil {
+			le.Type = "U"
+		} else if op.Remove == true {
+			le.Type = "R"
+		} else if op.Assert != nil {
+			le.Type = "A"
+		} else {
+			le.Type = "?"
+		}
+
+		d, _ := json.Marshal(le)
+
+		txnLogger.Tracef("WEBSCALE %s", string(d))
+	}
 }
