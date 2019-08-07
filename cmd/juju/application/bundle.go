@@ -4,12 +4,14 @@
 package application
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/juju/bundlechanges"
@@ -95,6 +97,8 @@ type bundleDeploySpec struct {
 	dryRun bool
 	force  bool
 	trust  bool
+
+	addCharmConcurrency int
 
 	bundleDataSource  charm.BundleDataSource
 	bundleDir         string
@@ -257,6 +261,10 @@ type bundleHandler struct {
 	// accountUser holds the user of the account associated with the
 	// current controller.
 	accountUser string
+
+	// If set to a value greater than one, the bundle deployer will process
+	// add charm changes in parallel batches of addCharmConcurrency items.
+	addCharmConcurrency int
 }
 
 func makeBundleHandler(bundleData *charm.BundleData, spec bundleDeploySpec) *bundleHandler {
@@ -287,6 +295,8 @@ func makeBundleHandler(bundleData *charm.BundleData, spec bundleDeploySpec) *bun
 		targetModelUUID: spec.targetModelUUID,
 		controllerName:  spec.controllerName,
 		accountUser:     spec.accountUser,
+
+		addCharmConcurrency: spec.addCharmConcurrency,
 	}
 }
 
@@ -424,43 +434,30 @@ func (h *bundleHandler) handleChanges() error {
 		fmt.Fprintf(h.ctx.Stdout, "Executing changes:\n")
 	}
 
-	// Deploy the bundle.
-	for i, change := range h.changes {
-		fmt.Fprintf(h.ctx.Stdout, "- %s\n", change.Description())
-		logger.Tracef("%d: change %s", i, pretty.Sprint(change))
-		switch change := change.(type) {
-		case *bundlechanges.AddCharmChange:
-			err = h.addCharm(change)
-		case *bundlechanges.AddMachineChange:
-			err = h.addMachine(change)
-		case *bundlechanges.AddRelationChange:
-			err = h.addRelation(change)
-		case *bundlechanges.AddApplicationChange:
-			err = h.addApplication(change)
-		case *bundlechanges.ScaleChange:
-			err = h.scaleApplication(change)
-		case *bundlechanges.AddUnitChange:
-			err = h.addUnit(change)
-		case *bundlechanges.ExposeChange:
-			err = h.exposeApplication(change)
-		case *bundlechanges.SetAnnotationsChange:
-			err = h.setAnnotations(change)
-		case *bundlechanges.UpgradeCharmChange:
-			err = h.upgradeCharm(change)
-		case *bundlechanges.SetOptionsChange:
-			err = h.setOptions(change)
-		case *bundlechanges.SetConstraintsChange:
-			err = h.setConstraints(change)
-		case *bundlechanges.CreateOfferChange:
-			err = h.createOffer(change)
-		case *bundlechanges.ConsumeOfferChange:
-			err = h.consumeOffer(change)
-		case *bundlechanges.GrantOfferAccessChange:
-			err = h.grantOfferAccess(change)
-		default:
-			return errors.Errorf("unknown change type: %T", change)
+	// Split changes into a parallelizable list of addCharm changes and
+	// a sequential list with non-addCharm changes
+	var addCharmChanges, otherChanges []bundlechanges.Change
+	if h.addCharmConcurrency > 1 {
+		for _, change := range h.changes {
+			if _, valid := change.(*bundlechanges.AddCharmChange); valid {
+				addCharmChanges = append(addCharmChanges, change)
+				continue
+			}
+			otherChanges = append(otherChanges, change)
 		}
-		if err != nil {
+
+		// Run parallel steps first
+		if err = h.applyChangesInParallel(addCharmChanges, h.addCharmConcurrency); err != nil {
+			return errors.Trace(err)
+		}
+	} else {
+		otherChanges = h.changes
+	}
+
+	// Run sequential deployment steps
+	offset := len(addCharmChanges)
+	for i, change := range otherChanges {
+		if err = h.applyChange(i+offset, change); err != nil {
 			return errors.Trace(err)
 		}
 	}
@@ -469,6 +466,103 @@ func (h *bundleHandler) handleChanges() error {
 		h.ctx.Infof("Deploy of bundle completed.")
 	}
 
+	return nil
+}
+
+func (h *bundleHandler) applyChangesInParallel(changes []bundlechanges.Change, maxConcurrency int) error {
+	var (
+		wg            sync.WaitGroup
+		errCh         = make(chan error, maxConcurrency)
+		tokCh         = make(chan struct{}, maxConcurrency)
+		ctx, cancelFn = context.WithCancel(context.Background())
+	)
+	defer func() {
+		cancelFn()
+		close(tokCh)
+	}()
+
+	fmt.Fprintf(h.ctx.Stdout, "- applying %d changes concurrently in batches of %d\n", len(changes), maxConcurrency)
+
+	// Setup waitgroup and load the token pool
+	wg.Add(len(changes))
+	for i := 0; i < maxConcurrency; i++ {
+		tokCh <- struct{}{}
+	}
+
+	// Spawn len(chages) workers which use the token pool as a concurrency
+	// limiting primitive and either execute a change or bailout if an
+	// error occurs
+	for i := 0; i < len(changes); i++ {
+		go func(index int) {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				return
+			case tok := <-tokCh:
+				if err := h.applyChange(i, changes[index]); err != nil {
+					errCh <- err
+					cancelFn() // signal other workers to exit
+					return
+				}
+				tokCh <- tok
+			}
+		}(i)
+	}
+
+	// Wait for workers to exit and dequeue any errors
+	wg.Wait()
+	close(errCh)
+	var errs []string
+	for wErr := range errCh {
+		errs = append(errs, wErr.Error())
+	}
+
+	if len(errs) != 0 {
+		return errors.New("the following errors occured:\n" + strings.Join(errs, "\n"))
+	}
+	return nil
+}
+
+func (h *bundleHandler) applyChange(i int, change bundlechanges.Change) error {
+	fmt.Fprintf(h.ctx.Stdout, "- %s\n", change.Description())
+	logger.Tracef("%d: change %s", i, pretty.Sprint(change))
+
+	var err error
+	switch change := change.(type) {
+	case *bundlechanges.AddCharmChange:
+		err = h.addCharm(change)
+	case *bundlechanges.AddMachineChange:
+		err = h.addMachine(change)
+	case *bundlechanges.AddRelationChange:
+		err = h.addRelation(change)
+	case *bundlechanges.AddApplicationChange:
+		err = h.addApplication(change)
+	case *bundlechanges.ScaleChange:
+		err = h.scaleApplication(change)
+	case *bundlechanges.AddUnitChange:
+		err = h.addUnit(change)
+	case *bundlechanges.ExposeChange:
+		err = h.exposeApplication(change)
+	case *bundlechanges.SetAnnotationsChange:
+		err = h.setAnnotations(change)
+	case *bundlechanges.UpgradeCharmChange:
+		err = h.upgradeCharm(change)
+	case *bundlechanges.SetOptionsChange:
+		err = h.setOptions(change)
+	case *bundlechanges.SetConstraintsChange:
+		err = h.setConstraints(change)
+	case *bundlechanges.CreateOfferChange:
+		err = h.createOffer(change)
+	case *bundlechanges.ConsumeOfferChange:
+		err = h.consumeOffer(change)
+	case *bundlechanges.GrantOfferAccessChange:
+		err = h.grantOfferAccess(change)
+	default:
+		return errors.Errorf("unknown change type: %T", change)
+	}
+	if err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 

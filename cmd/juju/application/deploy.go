@@ -407,6 +407,12 @@ type DeployCommand struct {
 	// to trusted credentials will be granted access.
 	Trust bool
 
+	// When deploying a bundle containing multiple charms, charms are
+	// normally added to the controller sequentially. A value > 1 for
+	// enables the deploy code to add charms to the controller in parallel
+	// batches of AddCharmConcurrency items.
+	AddCharmConcurrency int
+
 	machineMap string
 	flagSet    *gnuflag.FlagSet
 
@@ -730,6 +736,8 @@ func (c *DeployCommand) SetFlags(f *gnuflag.FlagSet) {
 	f.StringVar(&c.BindToSpaces, "bind", "", "Configure application endpoint bindings to spaces")
 	f.StringVar(&c.machineMap, "map-machines", "", "Specify the existing machines to use for bundle deployments")
 
+	f.IntVar(&c.AddCharmConcurrency, "add-charm-concurrency", 1, "Number of charms that can be added to a controller in parallel")
+
 	for _, step := range c.Steps {
 		step.SetFlags(f)
 	}
@@ -870,6 +878,8 @@ func (c *DeployCommand) deployBundle(spec bundleDeploySpec) (rErr error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
+
+	spec.addCharmConcurrency = c.AddCharmConcurrency
 
 	var ok bool
 	if spec.targetModelUUID, ok = spec.apiRoot.ModelUUID(); !ok {
