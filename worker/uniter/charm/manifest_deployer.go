@@ -5,10 +5,15 @@ package charm
 
 import (
 	"fmt"
+	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/juju/collections/set"
+	"github.com/juju/errors"
 	"github.com/juju/utils"
 	"gopkg.in/juju/charm.v6"
 )
@@ -52,7 +57,8 @@ type manifestDeployer struct {
 }
 
 func (d *manifestDeployer) Stage(info BundleInfo, abort <-chan struct{}) error {
-	bundle, err := d.bundles.Read(info, abort)
+	br := retryingBundleReader{d.bundles}
+	bundle, err := br.Read(info, abort)
 	if err != nil {
 		return err
 	}
@@ -220,6 +226,42 @@ func manifestDeployError(err *error, upgrading bool) {
 			// never heard of it actually happening, so this is probably not
 			// a big deal.
 			*err = fmt.Errorf("cannot install charm: %v", *err)
+		}
+	}
+}
+
+type retryingBundleReader struct {
+	BundleReader
+}
+
+func (rbr retryingBundleReader) Read(bi BundleInfo, abort <-chan struct{}) (Bundle, error) {
+	baseDelay := float64(200 * time.Millisecond)
+	maxDelay := float64(8 * time.Second)
+	backoffFactor := 2.0
+	curl := bi.URL().String()
+	for attempt := 0.0; ; attempt++ {
+		b, err := rbr.BundleReader.Read(bi, abort)
+		if err == nil {
+			return b, nil
+		}
+
+		if !strings.HasSuffix(err.Error(), "not found") {
+			return nil, err
+		}
+
+		delay := baseDelay * math.Pow(backoffFactor, float64(attempt))
+		if delay > maxDelay {
+			delay = maxDelay
+		}
+		fuzz := rand.Float64()*0.2 + 0.9
+
+		wait := time.Duration(delay * fuzz).Round(time.Millisecond)
+		logger.Infof("charm %q has not finished downloading; retrying in %s", curl, wait.String())
+
+		select {
+		case <-time.After(wait):
+		case <-abort:
+			return nil, errors.New("operation aborted")
 		}
 	}
 }
