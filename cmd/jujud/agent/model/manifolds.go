@@ -33,6 +33,7 @@ import (
 	"github.com/juju/juju/worker/caasfirewaller"
 	"github.com/juju/juju/worker/caasoperatorprovisioner"
 	"github.com/juju/juju/worker/caasunitprovisioner"
+	"github.com/juju/juju/worker/charmdownloader"
 	"github.com/juju/juju/worker/charmrevision"
 	"github.com/juju/juju/worker/charmrevision/charmrevisionmanifold"
 	"github.com/juju/juju/worker/cleaner"
@@ -282,6 +283,12 @@ func commonManifolds(config ManifoldsConfig) dependency.Manifolds {
 		modelUpgradedFlagName: gate.FlagManifold(gate.FlagManifoldConfig{
 			GateName:  modelUpgradeGateName,
 			NewWorker: gate.NewFlagWorker,
+		}),
+
+		charmDownloaderName: charmdownloader.Manifold(charmdownloader.ManifoldConfig{
+			APICallerName: apiCallerName,
+			Logger:        loggo.GetLogger("juju.worker.charmdownloader"),
+			NewWorker:     charmdownloader.NewWorker,
 		}),
 	}
 	return result
@@ -608,4 +615,6 @@ const (
 	caasBrokerTrackerName       = "caas-broker-tracker"
 
 	validCredentialFlagName = "valid-credential-flag"
+
+	charmDownloaderName = "charm-downloader"
 )
