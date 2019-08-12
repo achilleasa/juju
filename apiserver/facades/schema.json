@@ -7767,6 +7767,14 @@
                             "$ref": "#/definitions/ErrorResults"
                         }
                     }
+                },
+                "WatchCharmsPendingForDownload": {
+                    "type": "object",
+                    "properties": {
+                        "Result": {
+                            "$ref": "#/definitions/StringsWatchResult"
+                        }
+                    }
                 }
             },
             "definitions": {
@@ -7832,6 +7840,27 @@
                     "additionalProperties": false,
                     "required": [
                         "results"
+                    ]
+                },
+                "StringsWatchResult": {
+                    "type": "object",
+                    "properties": {
+                        "changes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        },
+                        "watcher-id": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "watcher-id"
                     ]
                 }
             }

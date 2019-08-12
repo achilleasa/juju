@@ -706,25 +706,28 @@ func (st *State) AllCharms() ([]*Charm, error) {
 	return charms, errors.Trace(iter.Close())
 }
 
-// Charm returns the charm with the given URL. Charms pending upload
-// to storage and placeholders are never returned.
+// Charm returns the charm with the given URL. Charms placeholders are never returned.
 func (st *State) Charm(curl *charm.URL) (*Charm, error) {
+	return st.findCharmByID(curl.String())
+}
+
+// Charm returns the charm with the given URL. Charms placeholders are never returned.
+func (st *State) findCharmByID(charmID string) (*Charm, error) {
 	charms, closer := st.db().GetCollection(charmsC)
 	defer closer()
 
 	cdoc := &charmDoc{}
 	what := bson.D{
-		{"_id", curl.String()},
+		{"_id", charmID},
 		{"placeholder", bson.D{{"$ne", true}}},
-		{"pendingupload", bson.D{{"$ne", true}}},
 	}
 	what = append(what, nsLife.notDead()...)
 	err := charms.Find(what).One(&cdoc)
 	if err == mgo.ErrNotFound {
-		return nil, errors.NotFoundf("charm %q", curl)
+		return nil, errors.NotFoundf("charm %q", charmID)
 	}
 	if err != nil {
-		return nil, errors.Annotatef(err, "cannot get charm %q", curl)
+		return nil, errors.Annotatef(err, "cannot get charm %q", charmID)
 	}
 	if err := cdoc.Meta.Check(); err != nil {
 		return nil, errors.Annotatef(err, "malformed charm metadata found in state")
@@ -923,4 +926,18 @@ func (st *State) UpdateUploadedCharm(info CharmInfo) (*Charm, error) {
 		return nil, onAbort(err, ErrCharmRevisionAlreadyModified)
 	}
 	return st.Charm(info.ID)
+}
+
+func (st *State) WatchCharmsPendingForDownload() StringsWatcher {
+	return newCollectionWatcher(st, colWCfg{
+		col: charmsC,
+		filter: func(key interface{}) bool {
+			sKey, ok := key.(string)
+			if !ok {
+				return false
+			}
+			ch, _ := st.findCharmByID(sKey)
+			return ch != nil && ch.IsUploaded() == false
+		},
+	})
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/juju/juju/apiserver/params"
 	"github.com/juju/juju/permission"
 	"github.com/juju/juju/state"
+	"github.com/juju/juju/state/watcher"
 	"github.com/juju/loggo"
 	charm "gopkg.in/juju/charm.v6"
 	names "gopkg.in/juju/names.v2"
@@ -34,12 +35,14 @@ var getState = func(pool *state.StatePool, modelUUID string) (*state.PooledState
 type API struct {
 	st         *state.State
 	authorizer facade.Authorizer
+	resources  facade.Resources
 }
 
 func NewFacade(ctx facade.Context) (*API, error) {
 	return &API{
 		st:         ctx.State(),
 		authorizer: ctx.Auth(),
+		resources:  ctx.Resources(),
 	}, nil
 }
 
@@ -114,4 +117,23 @@ func (a *API) checkIsAdmin(modelUUID string) error {
 		return common.ErrPerm
 	}
 	return nil
+}
+
+func (a *API) WatchCharmsPendingForDownload() (params.StringsWatchResult, error) {
+	/*
+		// FIXME: check permissions
+		if err := a.checkIsAdmin(a.st.ModelUUID()); err != nil {
+			result.Results[i].Error = common.ServerError(err)
+			continue
+		}
+	*/
+
+	watch := a.st.WatchCharmsPendingForDownload()
+	if changes, ok := <-watch.Changes(); ok {
+		return params.StringsWatchResult{
+			StringsWatcherId: a.resources.Register(watch),
+			Changes:          changes,
+		}, nil
+	}
+	return params.StringsWatchResult{}, watcher.EnsureErr(watch)
 }
