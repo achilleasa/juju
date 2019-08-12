@@ -55,6 +55,9 @@ type charmDoc struct {
 	// CharmVersion
 	CharmVersion string `bson:"charm-version"`
 
+	// The channel this charm was retrieved from (charmstore-only)
+	CharmChannel string `bson:"charm-channel"`
+
 	// Life manages charm lifetime in the usual way, but only local
 	// charms can actually be "destroyed"; store charms are
 	// immortal.
@@ -90,12 +93,14 @@ type charmDoc struct {
 
 // CharmInfo contains all the data necessary to store a charm's metadata.
 type CharmInfo struct {
-	Charm       charm.Charm
-	ID          *charm.URL
-	StoragePath string
-	SHA256      string
-	Macaroon    macaroon.Slice
-	Version     string
+	Charm         charm.Charm
+	ID            *charm.URL
+	StoragePath   string
+	SHA256        string
+	Macaroon      macaroon.Slice
+	Version       string
+	PendingUpload bool
+	CharmChannel  string
 }
 
 // insertCharmOps returns the txn operations necessary to insert the supplied
@@ -106,15 +111,17 @@ func insertCharmOps(mb modelBackend, info CharmInfo) ([]txn.Op, error) {
 	}
 
 	doc := charmDoc{
-		DocID:        info.ID.String(),
-		URL:          info.ID,
-		CharmVersion: info.Version,
-		Meta:         info.Charm.Meta(),
-		Config:       safeConfig(info.Charm),
-		Metrics:      info.Charm.Metrics(),
-		Actions:      info.Charm.Actions(),
-		BundleSha256: info.SHA256,
-		StoragePath:  info.StoragePath,
+		DocID:         info.ID.String(),
+		URL:           info.ID,
+		CharmVersion:  info.Version,
+		Meta:          info.Charm.Meta(),
+		Config:        safeConfig(info.Charm),
+		Metrics:       info.Charm.Metrics(),
+		Actions:       info.Charm.Actions(),
+		BundleSha256:  info.SHA256,
+		StoragePath:   info.StoragePath,
+		PendingUpload: info.PendingUpload,
+		CharmChannel:  info.CharmChannel,
 	}
 	lpc, ok := info.Charm.(charm.LXDProfiler)
 	if !ok {
@@ -228,6 +235,7 @@ func updateCharmOps(mb modelBackend, info CharmInfo, assert bson.D) ([]txn.Op, e
 		{"bundlesha256", info.SHA256},
 		{"pendingupload", false},
 		{"placeholder", false},
+		{"charm-channel", info.CharmChannel},
 	}
 
 	lpc, ok := info.Charm.(charm.LXDProfiler)
@@ -600,6 +608,11 @@ func (c *Charm) UpdateMacaroon(m macaroon.Slice) error {
 		return errors.Trace(err)
 	}
 	return nil
+}
+
+// Channel returns the channel used to retrieve this charm.
+func (c *Charm) Channel() string {
+	return c.doc.CharmChannel
 }
 
 // AddCharm adds the ch charm with curl to the state.
