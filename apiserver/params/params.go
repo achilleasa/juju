@@ -181,6 +181,11 @@ type AddCharmWithAuthorization struct {
 	Channel            string             `json:"channel"`
 	CharmStoreMacaroon *macaroon.Macaroon `json:"macaroon"`
 	Force              bool               `json:"force"`
+
+	// If set to false, calls to AddCharmXXX endpoints will create the
+	// appropriate documents for adding a charm to the state but defer
+	// its download to a later point in time.
+	ForceDownload bool `json:"force-download"`
 }
 
 // AddMachineParams encapsulates the parameters used to create a new machine.

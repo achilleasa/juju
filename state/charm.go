@@ -810,13 +810,13 @@ func isCharmRevSeqName(name string) bool {
 // PendingUpload=true, which is then returned as a *state.Charm.
 //
 // The url's schema must be "cs" and it must include a revision.
-func (st *State) PrepareStoreCharmUpload(curl *charm.URL) (*Charm, error) {
+func (st *State) PrepareStoreCharmUpload(info CharmInfo) (*Charm, error) {
 	// Perform a few sanity checks first.
-	if curl.Schema != "cs" {
-		return nil, errors.Errorf("expected charm URL with cs schema, got %q", curl)
+	if info.ID.Schema != "cs" {
+		return nil, errors.Errorf("expected charm URL with cs schema, got %q", info.ID)
 	}
-	if curl.Revision < 0 {
-		return nil, errors.Errorf("expected charm URL with revision, got %q", curl)
+	if info.ID.Revision < 0 {
+		return nil, errors.Errorf("expected charm URL with revision, got %q", info.ID)
 	}
 
 	charms, closer := st.db().GetCollection(charmsC)
@@ -828,15 +828,10 @@ func (st *State) PrepareStoreCharmUpload(curl *charm.URL) (*Charm, error) {
 	)
 	buildTxn := func(attempt int) ([]txn.Op, error) {
 		// Find an uploaded or pending charm with the given exact curl.
-		err := charms.FindId(curl.String()).One(&uploadedCharm)
+		err := charms.FindId(info.ID.String()).One(&uploadedCharm)
 		switch {
 		case err == mgo.ErrNotFound:
-			uploadedCharm = charmDoc{
-				DocID:         st.docID(curl.String()),
-				URL:           curl,
-				PendingUpload: true,
-			}
-			return insertAnyCharmOps(st, &uploadedCharm)
+			return insertCharmOps(st, info)
 		case err != nil:
 			return nil, errors.Trace(err)
 		case uploadedCharm.Placeholder:

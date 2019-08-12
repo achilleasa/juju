@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/juju/utils"
@@ -59,8 +60,9 @@ type StateModel interface {
 
 // CharmState represents directives for accessing charm methods
 type CharmState interface {
+	Charm(curl *charm.URL) (*state.Charm, error)
 	UpdateUploadedCharm(info state.CharmInfo) (*state.Charm, error)
-	PrepareStoreCharmUpload(curl *charm.URL) (StateCharm, error)
+	PrepareStoreCharmUpload(info state.CharmInfo) (StateCharm, error)
 }
 
 // ModelState represents methods for accessing model definitions
@@ -105,20 +107,76 @@ func AddCharmWithAuthorizationAndRepo(st State, args params.AddCharmWithAuthoriz
 		return fmt.Errorf("charm URL must include revision")
 	}
 
-	// First, check if a pending or a real charm exists in state.
-	stateCharm, err := st.PrepareStoreCharmUpload(charmURL)
+	repo, err := repoFn()
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
-	if stateCharm.IsUploaded() {
-		// Charm already in state (it was uploaded already).
+
+	// Check if a doc for this charm already exists
+	stateCharm, err := st.Charm(charmURL)
+	if err != nil && !errors.IsNotFound(err) {
+		return errors.Trace(err)
+	}
+
+	// If charm was not found fetch a proxy for the charm which will allow
+	// us to populate all relevant metadata in the charm doc without
+	// downloading the full charm archive.
+	if errors.IsNotFound(err) {
+		// If no error occured but we were asked to download the charm
+		// anyway, fall through to the code below.
+		if err = fetchAndStoreLightweightCharm(st, repo, charmURL, args); err != nil || !args.ForceDownload {
+			return err
+		}
+	}
+
+	// Charm already in state and uploaded or pending but were were not
+	// explicitly asked to download it.
+	if stateCharm.IsUploaded() || !args.ForceDownload {
 		return nil
 	}
 
-	// Get the repo from the constructor
-	repo, err := repoFn()
+	return fetchAndStoreCharmArchive(st, repo, charmURL, args)
+}
 
-	// Get the charm and its information from the store.
+func fetchAndStoreLightweightCharm(st State, repo charmrepo.Interface, charmURL *charm.URL, args params.AddCharmWithAuthorization) error {
+	// Get lightweight charm representation without downloading the full archive.
+	charmProxy, err := repo.GetCharmProxy(charmURL, csparams.Channel(args.Channel))
+	if err != nil {
+		cause := errors.Cause(err)
+		if httpbakery.IsDischargeError(cause) || httpbakery.IsInteractionError(cause) {
+			return errors.NewUnauthorized(err, "")
+		}
+		return errors.Trace(err)
+	}
+
+	if err := checkDeploymentConstraints(charmProxy, args); err != nil {
+		return errors.Trace(err)
+	}
+
+	info := state.CharmInfo{
+		Charm:         charmProxy,
+		ID:            charmURL,
+		CharmChannel:  args.Channel,
+		PendingUpload: true,
+	}
+	if args.CharmStoreMacaroon != nil {
+		info.Macaroon = macaroon.Slice{args.CharmStoreMacaroon}
+	}
+
+	// Upsert charm in state and flag it as "upload-pending"
+	_, err = st.PrepareStoreCharmUpload(info)
+	return err
+}
+
+func fetchAndStoreCharmArchive(st State, repo charmrepo.Interface, charmURL *charm.URL, args params.AddCharmWithAuthorization) error {
+	defer func(start time.Time) {
+		var fromChannel string
+		if args.Channel != "" {
+			fromChannel = fmt.Sprintf(" (from %s)", args.Channel)
+		}
+		logger.Infof("downloaded charm %q%s for model %q in %s", charmURL, fromChannel, st.ModelUUID(), time.Since(start).Truncate(time.Millisecond).String())
+	}(time.Now())
+
 	downloadedCharm, err := repo.Get(charmURL)
 	if err != nil {
 		cause := errors.Cause(err)
@@ -128,29 +186,22 @@ func AddCharmWithAuthorizationAndRepo(st State, args params.AddCharmWithAuthoriz
 		return errors.Trace(err)
 	}
 
-	if err := checkMinVersion(downloadedCharm); err != nil {
+	// We have already checked this in fetchAndStoreLightweightCharm; let's
+	// be extra paranoid and double-check here as well.
+	if err := checkDeploymentConstraints(downloadedCharm, args); err != nil {
 		return errors.Trace(err)
 	}
 
-	// Open it and calculate the SHA256 hash.
 	downloadedBundle, ok := downloadedCharm.(*charm.CharmArchive)
 	if !ok {
 		return errors.Errorf("expected a charm archive, got %T", downloadedCharm)
-	}
-
-	// Validate the charm lxd profile once we've downloaded it.
-	if err := lxdprofile.ValidateLXDProfile(lxdCharmArchiveProfiler{
-		CharmArchive: downloadedBundle,
-	}); err != nil {
-		if !args.Force {
-			return errors.Annotate(err, "cannot add charm")
-		}
 	}
 
 	// Clean up the downloaded charm - we don't need to cache it in
 	// the filesystem as well as in blob storage.
 	defer os.Remove(downloadedBundle.Path)
 
+	// Open archive and calculate the SHA256 hash.
 	archive, err := os.Open(downloadedBundle.Path)
 	if err != nil {
 		return errors.Annotate(err, "cannot read downloaded charm")
@@ -171,6 +222,7 @@ func AddCharmWithAuthorizationAndRepo(st State, args params.AddCharmWithAuthoriz
 		Size:         size,
 		SHA256:       bundleSHA256,
 		CharmVersion: downloadedBundle.Version(),
+		CharmChannel: args.Channel,
 	}
 	if args.CharmStoreMacaroon != nil {
 		ca.Macaroon = macaroon.Slice{args.CharmStoreMacaroon}
@@ -178,6 +230,21 @@ func AddCharmWithAuthorizationAndRepo(st State, args params.AddCharmWithAuthoriz
 
 	// Store the charm archive in environment storage.
 	return StoreCharmArchive(st, ca)
+}
+
+func checkDeploymentConstraints(ch charm.Charm, args params.AddCharmWithAuthorization) error {
+	if err := checkMinVersion(ch); err != nil {
+		return errors.Trace(err)
+	}
+
+	// Validate the charm lxd profile once we've downloaded it.
+	if err := lxdprofile.ValidateLXDProfile(lxdCharmProfiler{ch}); err != nil {
+		if !args.Force {
+			return errors.Annotate(err, "cannot add charm")
+		}
+	}
+
+	return nil
 }
 
 // AddCharmWithAuthorization adds the given charm URL (which must include revision) to
@@ -285,8 +352,11 @@ type CharmArchive struct {
 	// Macaroon is the authorization macaroon for accessing the charmstore.
 	Macaroon macaroon.Slice
 
-	// Charm Version contains semantic version of charm, typically the output of git describe.
+	// CharmVersion contains semantic version of charm, typically the output of git describe.
 	CharmVersion string
+
+	// CharmChannel specifies the channel this bundle was obtained from.
+	CharmChannel string
 }
 
 // StoreCharmArchive stores a charm archive in environment storage.
@@ -301,12 +371,13 @@ func StoreCharmArchive(st State, archive CharmArchive) error {
 	}
 
 	info := state.CharmInfo{
-		Charm:       archive.Charm,
-		ID:          archive.ID,
-		StoragePath: storagePath,
-		SHA256:      archive.SHA256,
-		Macaroon:    archive.Macaroon,
-		Version:     archive.CharmVersion,
+		Charm:        archive.Charm,
+		ID:           archive.ID,
+		StoragePath:  storagePath,
+		SHA256:       archive.SHA256,
+		Macaroon:     archive.Macaroon,
+		Version:      archive.CharmVersion,
+		CharmChannel: archive.CharmChannel,
 	}
 
 	// Now update the charm data in state and mark it as no longer pending.
@@ -411,8 +482,8 @@ func NewStateShim(st *state.State) State {
 	}
 }
 
-func (s csStateShim) PrepareStoreCharmUpload(curl *charm.URL) (StateCharm, error) {
-	charm, err := s.State.PrepareStoreCharmUpload(curl)
+func (s csStateShim) PrepareStoreCharmUpload(info state.CharmInfo) (StateCharm, error) {
+	charm, err := s.State.PrepareStoreCharmUpload(info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -443,20 +514,15 @@ func (s csStateModelShim) ModelConfig() (*config.Config, error) {
 	return s.Model.ModelConfig()
 }
 
-// lxdCharmArchiveProfiler massages a *charm.CharmArchive into a LXDProfiler
-// inside of the core package.
+// lxdCharmArchiveProfiler massages a charm.Charm into a LXDProfiler
 type lxdCharmArchiveProfiler struct {
-	CharmArchive *charm.CharmArchive
+	ch charm.Charm
 }
 
 // LXDProfile implements core.lxdprofile.LXDProfiler
 func (p lxdCharmArchiveProfiler) LXDProfile() lxdprofile.LXDProfile {
-	if p.CharmArchive == nil {
+	if p.ch == nil {
 		return nil
 	}
-	profile := p.CharmArchive.LXDProfile()
-	if profile == nil {
-		return nil
-	}
-	return profile
+	return p.ch.LXDProfile()
 }
