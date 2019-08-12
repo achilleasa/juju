@@ -147,11 +147,13 @@
 
 [[constraint]]
   name = "gopkg.in/juju/charm.v6"
-  revision = "77bc1b09aca2e72adbb0a608f2ba4ede37e9f704"
+  source = "github.com/achilleasa/charm"
+  branch = "add-lxd-profile-to-charm-interface"
 
 [[constraint]]
-  revision = "2adcece4e962a51e0793b8562560cf9da874026f"
   name = "gopkg.in/juju/charmrepo.v3"
+  source = "github.com/achilleasa/charmrepo"
+  branch = "add-support-for-charm-proxies"
 
 [[constraint]]
   revision = "7359fc7857abe2b11b5b3e23811a9c64cb6b01e0"
@@ -179,7 +181,9 @@
 
 [[constraint]]
   name = "gopkg.in/juju/charmstore.v5"
-  revision = "743b5ab3209d901b82aaa6594c405e017e0761a9"
+  source = "github.com/achilleasa/charmstore"
+  branch = "implement-lxdprofile-method-for-entity-charms"
+
 
 [[override]]
   name = "github.com/masterzen/xmlpath"

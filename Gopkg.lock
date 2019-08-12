@@ -133,14 +133,6 @@
   version = "v0.1.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:464e77c45b541f9dd4648621594efe80368ee2e52d78771a46a776371a1286fa"
-  name = "github.com/cloud-green/monitoring"
-  packages = ["."]
-  pruneopts = ""
-  revision = "666e3beca3cb4f6b5c8f176ba80daf2b3adbd84e"
-
-[[projects]]
   digest = "1:8783f4f99cf4e5812a0030569b6a23f53e985d10322079a37c39b837f5396a4b"
   name = "github.com/coreos/go-systemd"
   packages = [
@@ -616,6 +608,14 @@
   revision = "24974d6c264fe5a29716e7d56ea24c4bd904b7cc"
 
 [[projects]]
+  branch = "master"
+  digest = "1:83c5af1d6638a06ee2138ac171e4b054d7b8c62dce994b026238e4f6566fdd19"
+  name = "github.com/juju/mgomonitor"
+  packages = ["."]
+  pruneopts = ""
+  revision = "52206bb0cd318e6667fb0e651cca08437b70134b"
+
+[[projects]]
   digest = "1:b043566d9b325a8416f98af1bd46a00b498b16c1aba36e6708f79eda664d88d4"
   name = "github.com/juju/mutex"
   packages = ["."]
@@ -1027,14 +1027,6 @@
   packages = ["."]
   pruneopts = ""
   revision = "c48cc78d482608239f6c4c92a4abd87eb8761c90"
-
-[[projects]]
-  digest = "1:7a4827b2062a21ba644241bdec27959a5be2670f8aa4038ba14cfe2ce389e8d2"
-  name = "github.com/ncw/swift"
-  packages = ["."]
-  pruneopts = ""
-  revision = "b2a7479cf26fa841ff90dd932d0221cb5c50782d"
-  version = "v1.0.39"
 
 [[projects]]
   branch = "master"
@@ -1483,7 +1475,8 @@
   revision = "51fa6e26128d74e445c72d3a91af555151cc3654"
 
 [[projects]]
-  digest = "1:ed246f348bdaa738a066035e2551a826e966f55a5528d6f44f9e8270c04a3888"
+  branch = "add-lxd-profile-to-charm-interface"
+  digest = "1:33b1fb8481bdb6d4fe0a99835014b77f223ec45b74dbc7af894bdcd496d86a33"
   name = "gopkg.in/juju/charm.v6"
   packages = [
     ".",
@@ -1491,10 +1484,12 @@
     "resource",
   ]
   pruneopts = ""
-  revision = "77bc1b09aca2e72adbb0a608f2ba4ede37e9f704"
+  revision = "86a40fe85c76230a6ac01e9995ae72743abe665c"
+  source = "github.com/achilleasa/charm"
 
 [[projects]]
-  digest = "1:dc05394e66d3dfe6ecc7b966cc0ac4ab40c3d10b0249499af92f4c4ae3ad6e85"
+  branch = "add-support-for-charm-proxies"
+  digest = "1:ee617be01aa49a3d29d71720aac4f6b078b492d7c346b03c77d850d4849c6a1c"
   name = "gopkg.in/juju/charmrepo.v3"
   packages = [
     ".",
@@ -1503,10 +1498,12 @@
     "testing",
   ]
   pruneopts = ""
-  revision = "2adcece4e962a51e0793b8562560cf9da874026f"
+  revision = "2680c46cfec549ea1622444af44bac1298a830b0"
+  source = "github.com/achilleasa/charmrepo"
 
 [[projects]]
-  digest = "1:74fbfdf0898041a163a696f0a901b6f4740a47ceffb1839d514ba75699a60c3e"
+  branch = "implement-lxdprofile-method-for-entity-charms"
+  digest = "1:05c5acb308597c19bc211b72b9660333ec047017b4ad0b5864ea7b1bf6df7698"
   name = "gopkg.in/juju/charmstore.v5"
   packages = [
     ".",
@@ -1527,7 +1524,8 @@
     "version",
   ]
   pruneopts = ""
-  revision = "743b5ab3209d901b82aaa6594c405e017e0761a9"
+  revision = "91777e211704f24187d7c0ddc8e1678c138f82c1"
+  source = "github.com/achilleasa/charmstore"
 
 [[projects]]
   digest = "1:7654e769ed719c292d72af4420ca772d9c850299271e15c6f5af4fb89526c3fd"
