@@ -15,6 +15,7 @@ import (
 	"github.com/juju/juju/apiserver/facades/agent/agent"
 	"github.com/juju/juju/apiserver/facades/agent/caasagent"
 	"github.com/juju/juju/apiserver/facades/agent/caasoperator"
+	"github.com/juju/juju/apiserver/facades/agent/charmdownloader"
 	"github.com/juju/juju/apiserver/facades/agent/credentialvalidator"
 	"github.com/juju/juju/apiserver/facades/agent/deployer"
 	"github.com/juju/juju/apiserver/facades/agent/diskmanager"
@@ -161,6 +162,7 @@ func AllFacades() *facade.Registry {
 	reg("Bundle", 1, bundle.NewFacadeV1)
 	reg("Bundle", 2, bundle.NewFacadeV2)
 	reg("Bundle", 3, bundle.NewFacadeV3)
+	reg("CharmDownloader", 1, charmdownloader.NewFacade)
 	reg("CharmRevisionUpdater", 2, charmrevisionupdater.NewCharmRevisionUpdaterAPI)
 	reg("Charms", 2, charms.NewFacade)
 	reg("Cleaner", 2, cleaner.NewCleanerAPI)

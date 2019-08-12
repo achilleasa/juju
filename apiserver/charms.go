@@ -283,9 +283,11 @@ func (h *charmsHandler) processPost(r *http.Request, st *state.State) (*charm.UR
 				return nil, errors.NewBadRequest(errors.NewNotValid(err, "revision"), "")
 			}
 		}
-		if _, err := st.PrepareStoreCharmUpload(curl); err != nil {
+
+		return nil, errors.Errorf("!!!! NOT IMPLEMENTED")
+		/*if _, err := st.PrepareStoreCharmUpload(curl); err != nil {
 			return nil, errors.Trace(err)
-		}
+		}*/
 	default:
 		return nil, errors.Errorf("unsupported schema %q", schema)
 	}

@@ -7752,6 +7752,92 @@
         }
     },
     {
+        "Name": "CharmDownloader",
+        "Version": 1,
+        "Schema": {
+            "type": "object",
+            "properties": {
+                "Download": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/DownloadCharmsArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/ErrorResults"
+                        }
+                    }
+                }
+            },
+            "definitions": {
+                "DownloadCharmsArgs": {
+                    "type": "object",
+                    "properties": {
+                        "charm-urls": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "charm-urls"
+                    ]
+                },
+                "Error": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string"
+                        },
+                        "info": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "object",
+                                    "additionalProperties": true
+                                }
+                            }
+                        },
+                        "message": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "message",
+                        "code"
+                    ]
+                },
+                "ErrorResult": {
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        }
+                    },
+                    "additionalProperties": false
+                },
+                "ErrorResults": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/ErrorResult"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "results"
+                    ]
+                }
+            }
+        }
+    },
+    {
         "Name": "CharmRevisionUpdater",
         "Version": 2,
         "Schema": {
@@ -8738,6 +8824,9 @@
                         "force": {
                             "type": "boolean"
                         },
+                        "force-download": {
+                            "type": "boolean"
+                        },
                         "macaroon": {
                             "$ref": "#/definitions/Macaroon"
                         },
@@ -8750,7 +8839,8 @@
                         "url",
                         "channel",
                         "macaroon",
-                        "force"
+                        "force",
+                        "force-download"
                     ]
                 },
                 "AddMachineParams": {
@@ -28736,6 +28826,9 @@
                         "force": {
                             "type": "boolean"
                         },
+                        "force-download": {
+                            "type": "boolean"
+                        },
                         "macaroon": {
                             "$ref": "#/definitions/Macaroon"
                         },
@@ -28748,7 +28841,8 @@
                         "url",
                         "channel",
                         "macaroon",
-                        "force"
+                        "force",
+                        "force-download"
                     ]
                 },
                 "AddPendingResourcesArgs": {
@@ -28764,6 +28858,9 @@
                             "type": "string"
                         },
                         "force": {
+                            "type": "boolean"
+                        },
+                        "force-download": {
                             "type": "boolean"
                         },
                         "macaroon": {
@@ -28790,6 +28887,7 @@
                         "channel",
                         "macaroon",
                         "force",
+                        "force-download",
                         "AddCharmWithAuthorization",
                         "resources"
                     ]

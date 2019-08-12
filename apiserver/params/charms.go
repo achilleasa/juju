@@ -194,3 +194,7 @@ type ContainerProfileResult struct {
 type ContainerProfileResults struct {
 	Results []ContainerProfileResult `json:"results"`
 }
+
+type DownloadCharmsArgs struct {
+	CharmsURLs []string `json:"charm-urls"`
+}
