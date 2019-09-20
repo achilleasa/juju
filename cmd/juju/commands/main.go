@@ -8,17 +8,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"text/template"
 
 	"github.com/juju/cmd"
 	"github.com/juju/errors"
+	"github.com/juju/gnuflag"
 	"github.com/juju/loggo"
 	utilsos "github.com/juju/os"
 	"github.com/juju/os/series"
 	proxyutils "github.com/juju/proxy"
 	"github.com/juju/utils/featureflag"
 	"github.com/juju/version"
+	"github.com/mattn/go-isatty"
 
 	// Import the providers.
 	cloudfile "github.com/juju/juju/cloud"
@@ -84,9 +87,10 @@ var x = []byte("\x96\x8c\x8a\x91\x93\x9a\x9e\x8c\x97\x99\x8a\x9c\x94\x96\x91\x98
 // provides an entry point for testing with arbitrary command line arguments.
 // This function returns the exit code, for main to pass to os.Exit.
 func Main(args []string) int {
-	return main{
-		execCommand: exec.Command,
-	}.Run(args)
+	return maybePaginateOutput(
+		main{execCommand: exec.Command},
+		args,
+	)
 }
 
 // main is a type that captures dependencies for running the main function.
@@ -96,18 +100,12 @@ type main struct {
 }
 
 // Run is the main entry point for the juju client.
-func (m main) Run(args []string) int {
-	ctx, err := cmd.DefaultContext()
-	if err != nil {
-		cmd.WriteError(os.Stderr, err)
-		return 2
-	}
-
+func (m main) Run(ctx *cmd.Context, args []string) int {
 	// note that this has to come before we init the juju home directory,
 	// since it relies on detecting the lack of said directory.
 	newInstall := m.maybeWarnJuju1x()
 
-	if err = juju.InitJujuXDGDataHome(); err != nil {
+	if err := juju.InitJujuXDGDataHome(); err != nil {
 		cmd.WriteError(ctx.Stderr, err)
 		return 2
 	}
@@ -216,6 +214,12 @@ func juju2xConfigDataExists() bool {
 	return err == nil
 }
 
+type globalFlagAdder struct{}
+
+func (gfa globalFlagAdder) AddFlags(fset *gnuflag.FlagSet) {
+	_ = fset.Bool("no-pager", false, "disable pager")
+}
+
 // NewJujuCommand ...
 func NewJujuCommand(ctx *cmd.Context) cmd.Command {
 	var jcmd *cmd.SuperCommand
@@ -232,6 +236,7 @@ func NewJujuCommand(ctx *cmd.Context) cmd.Command {
 			return cmd.DefaultUnrecognizedCommand(subcommand)
 		}),
 		UserAliasesFilename: osenv.JujuXDGDataHomePath("aliases"),
+		GlobalFlags:         globalFlagAdder{},
 		FlagKnownAs:         "option",
 	})
 	registerCommands(jcmd, ctx)
@@ -543,4 +548,84 @@ func (cloudToCommandAdapter) PersonalCloudMetadata() (map[string]cloudfile.Cloud
 }
 func (cloudToCommandAdapter) WritePersonalCloudMetadata(cloudsMap map[string]cloudfile.Cloud) error {
 	return cloudfile.WritePersonalCloudMetadata(cloudsMap)
+}
+
+// paginateOutput applies either a user-defined
+func maybePaginateOutput(mainRunner main, args []string) int {
+	ctx, err := cmd.DefaultContext()
+	if err != nil {
+		cmd.WriteError(os.Stderr, err)
+		return 2
+	}
+
+	if !pagerEnabled(args) {
+		return mainRunner.Run(ctx, args)
+	}
+
+	origStdout := os.Stdout
+	pr, pw, pErr := os.Pipe()
+	if pErr != nil {
+		cmd.WriteError(os.Stderr, pErr)
+		return 2
+	}
+
+	ctx.PagerEnabled = true
+
+	// If user does not explicitly override the pager command auto-select
+	// a sane default depending on the target platform
+	userPagerCmd := os.Getenv("PAGER")
+	if userPagerCmd == "" {
+		switch runtime.GOOS {
+		case "windows":
+			userPagerCmd = "more"
+		default:
+			// Use color-aware less and hide the pager if output
+			// fits the screen.
+			userPagerCmd = "/usr/bin/less -RXF"
+		}
+	}
+
+	pagerCmdBits := strings.Fields(userPagerCmd)
+	pagerCmd := exec.Command(pagerCmdBits[0], pagerCmdBits[1:]...)
+	pagerCmd.Stdin = pr
+	pagerCmd.Stdout = os.Stdout
+	pagerCmd.Stderr = os.Stderr
+	os.Stdout = pw
+
+	pagerDoneCh := make(chan struct{})
+	go func() {
+		_ = pagerCmd.Run()
+		close(pagerDoneCh)
+	}()
+
+	status := mainRunner.Run(ctx, args)
+
+	// Close pipe and wait for cmd to exit; then restore the pathed stdout
+	// and return the exit code back to the caller.
+	_ = pw.Close()
+	<-pagerDoneCh
+	os.Stdout = origStdout
+	return status
+}
+
+// pagerEnabled returns back if any of the following conditions applies:
+// - stdout is a dumb terminal or not a terminal (e.g. user redirects output)
+// - a "--no-pager" option is specified
+// - any of the args contains the string "json" or "yaml"
+func pagerEnabled(args []string) bool {
+	if !featureflag.Enabled(feature.JujuV3) {
+		return false
+	}
+
+	if os.Getenv("TERM") == "dumb" || !isatty.IsTerminal(os.Stdout.Fd()) {
+		return false
+	}
+
+	for _, arg := range args {
+		if arg == "--no-pager" || arg == "yaml" || arg == "json" {
+			return false
+		}
+	}
+
+	return true
 }

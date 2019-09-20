@@ -253,6 +253,11 @@ func (c *statusCommand) getStorageInfo(ctx *cmd.Context) (*storage.CombinedStora
 func (c *statusCommand) Run(ctx *cmd.Context) error {
 	defer c.close()
 
+	// Force-enable color output when paging is enabled
+	if ctx.PagerEnabled {
+		c.color = true
+	}
+
 	// Always attempt to get the status at least once, and retry if it fails.
 	status, err := c.getStatus()
 	if err != nil && !modelcmd.IsModelMigratedError(err) {
