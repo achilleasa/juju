@@ -267,15 +267,18 @@ func (s *ApplicationSuite) TestSetCharmWithNewBindings(c *gc.C) {
 	sp := s.assignUnitOnMachineWithSpaceToApplication(c, s.mysql, "isolated")
 	sch := s.AddMetaCharm(c, "mysql", metaBaseWithNewEndpoint, 2)
 
+	bindings, err := state.NewBindings(s.State, map[string]string{
+		"events": sp.Name(),
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
 	// Assign new charm endpoint to "isolated" space
 	cfg := state.SetCharmConfig{
-		Charm:      sch,
-		ForceUnits: true,
-		EndpointBindings: map[string]string{
-			"events": sp.Name(),
-		},
+		Charm:            sch,
+		ForceUnits:       true,
+		EndpointBindings: bindings,
 	}
-	err := s.mysql.SetCharm(cfg)
+	err = s.mysql.SetCharm(cfg)
 	c.Assert(err, jc.ErrorIsNil)
 
 	expBindings := map[string]string{
@@ -572,14 +575,18 @@ func (s *ApplicationSuite) TestSetCharmUpdatesBindings(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	oldCharm := s.AddMetaCharm(c, "mysql", metaBase, 44)
 
+	bindings, err := state.NewBindings(s.State, map[string]string{
+		"":       dbSpace.Name(),
+		"server": dbSpace.Name(),
+		"client": clientSpace.Name(),
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
 	application, err := s.State.AddApplication(state.AddApplicationArgs{
-		Name:  "yoursql",
-		Charm: oldCharm,
-		EndpointBindings: map[string]string{
-			"":       dbSpace.Id(),
-			"server": dbSpace.Id(),
-			"client": clientSpace.Id(),
-		}})
+		Name:             "yoursql",
+		Charm:            oldCharm,
+		EndpointBindings: bindings,
+	})
 	c.Assert(err, jc.ErrorIsNil)
 
 	newCharm := s.AddMetaCharm(c, "mysql", metaExtraEndpoints, 43)

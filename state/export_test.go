@@ -250,11 +250,19 @@ type addTestingApplicationParams struct {
 
 func addTestingApplication(c *gc.C, params addTestingApplicationParams) *Application {
 	c.Assert(params.ch, gc.NotNil)
+
+	var bindings *Bindings
+	var err error
+	if len(params.bindings) != 0 {
+		bindings, err = NewBindings(params.st, params.bindings)
+		c.Assert(err, jc.ErrorIsNil)
+	}
+
 	app, err := params.st.AddApplication(AddApplicationArgs{
 		Name:             params.name,
 		Series:           params.series,
 		Charm:            params.ch,
-		EndpointBindings: params.bindings,
+		EndpointBindings: bindings,
 		Storage:          params.storage,
 		Devices:          params.devices,
 	})

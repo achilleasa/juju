@@ -1181,7 +1181,7 @@ type AddApplicationArgs struct {
 	Storage           map[string]StorageConstraints
 	Devices           map[string]DeviceConstraints
 	AttachStorage     []names.StorageTag
-	EndpointBindings  map[string]string
+	EndpointBindings  *Bindings
 	ApplicationConfig *application.Config
 	CharmConfig       charm.Settings
 	NumUnits          int
@@ -1325,10 +1325,8 @@ func (st *State) AddApplication(args AddApplicationArgs) (_ *Application, err er
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	endpointBindingsOp, err := b.createOp(
-		args.EndpointBindings,
-		args.Charm.Meta(),
-	)
+	_, _ = b.Merge(args.EndpointBindings, args.Charm.Meta())
+	endpointBindingsOp, err := b.createOp(args.Charm.Meta())
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

@@ -475,6 +475,9 @@ func (factory *Factory) MakeApplicationReturningPassword(c *gc.C, params *Applic
 		resourceMap[name] = pendingID
 	}
 
+	bindings, err := state.NewBindings(factory.st, params.EndpointBindings)
+	c.Assert(err, gc.IsNil)
+
 	appConfig, err := application.NewConfig(params.ApplicationConfig, params.ApplicationConfigFields, nil)
 	c.Assert(err, jc.ErrorIsNil)
 	application, err := factory.st.AddApplication(state.AddApplicationArgs{
@@ -486,7 +489,7 @@ func (factory *Factory) MakeApplicationReturningPassword(c *gc.C, params *Applic
 		Storage:           params.Storage,
 		Constraints:       params.Constraints,
 		Resources:         resourceMap,
-		EndpointBindings:  params.EndpointBindings,
+		EndpointBindings:  bindings,
 		Placement:         params.Placement,
 	})
 	c.Assert(err, jc.ErrorIsNil)

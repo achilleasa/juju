@@ -139,14 +139,17 @@ func (s *DeployLocalSuite) TestDeployWithSomeSpecifiedBindings(c *gc.C) {
 	publicSpace, err := s.State.AddSpace("public", "", nil, false)
 	c.Assert(err, jc.ErrorIsNil)
 
+	bindings, err := state.NewBindings(s.State, map[string]string{
+		"":   publicSpace.Name(),
+		"db": dbSpace.Name(),
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
 	app, err := application.DeployApplication(stateDeployer{s.State},
 		application.DeployApplicationParams{
-			ApplicationName: "bob",
-			Charm:           wordpressCharm,
-			EndpointBindings: map[string]string{
-				"":   publicSpace.Id(),
-				"db": dbSpace.Id(),
-			},
+			ApplicationName:  "bob",
+			Charm:            wordpressCharm,
+			EndpointBindings: bindings,
 		})
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -175,16 +178,19 @@ func (s *DeployLocalSuite) TestDeployWithBoundRelationNamesAndExtraBindingsNames
 	internalSpace, err := s.State.AddSpace("internal", "", nil, false)
 	c.Assert(err, jc.ErrorIsNil)
 
+	bindings, err := state.NewBindings(s.State, map[string]string{
+		"":          publicSpace.Name(),
+		"db":        dbSpace.Name(),
+		"db-client": dbSpace.Name(),
+		"admin-api": internalSpace.Name(),
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
 	app, err := application.DeployApplication(stateDeployer{s.State},
 		application.DeployApplicationParams{
-			ApplicationName: "bob",
-			Charm:           wordpressCharm,
-			EndpointBindings: map[string]string{
-				"":          publicSpace.Id(),
-				"db":        dbSpace.Id(),
-				"db-client": dbSpace.Id(),
-				"admin-api": internalSpace.Id(),
-			},
+			ApplicationName:  "bob",
+			Charm:            wordpressCharm,
+			EndpointBindings: bindings,
 		})
 	c.Assert(err, jc.ErrorIsNil)
 
@@ -203,29 +209,6 @@ func (s *DeployLocalSuite) TestDeployWithBoundRelationNamesAndExtraBindingsNames
 
 }
 
-func (s *DeployLocalSuite) TestDeployWithInvalidSpace(c *gc.C) {
-	wordpressCharm := s.addWordpressCharm(c)
-	_, err := s.State.AddSpace("db", "", nil, false)
-	c.Assert(err, jc.ErrorIsNil)
-	publicSpace, err := s.State.AddSpace("public", "", nil, false)
-	c.Assert(err, jc.ErrorIsNil)
-
-	app, err := application.DeployApplication(stateDeployer{s.State},
-		application.DeployApplicationParams{
-			ApplicationName: "bob",
-			Charm:           wordpressCharm,
-			EndpointBindings: map[string]string{
-				"":   publicSpace.Id(),
-				"db": "42", //unknown space id
-			},
-		})
-	c.Assert(err, gc.ErrorMatches, `cannot add application "bob": space not found`)
-	c.Check(app, gc.IsNil)
-	// The application should not have been added
-	_, err = s.State.Application("bob")
-	c.Assert(err, jc.Satisfies, errors.IsNotFound)
-}
-
 func (s *DeployLocalSuite) TestDeployResources(c *gc.C) {
 	var f fakeDeployer
 
@@ -233,10 +216,7 @@ func (s *DeployLocalSuite) TestDeployResources(c *gc.C) {
 		application.DeployApplicationParams{
 			ApplicationName: "bob",
 			Charm:           s.charm,
-			EndpointBindings: map[string]string{
-				"": "public",
-			},
-			Resources: map[string]string{"foo": "bar"},
+			Resources:       map[string]string{"foo": "bar"},
 		})
 	c.Assert(err, jc.ErrorIsNil)
 

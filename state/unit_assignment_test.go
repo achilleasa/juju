@@ -107,16 +107,19 @@ func (s *UnitAssignmentSuite) TestAssignUnitWithPlacementNewMachinesHaveBindings
 	specialSpace, err := s.State.AddSpace("special-space", "", nil, false)
 	c.Assert(err, jc.ErrorIsNil)
 
+	bindings, err := state.NewBindings(s.State, map[string]string{
+		"": specialSpace.Name(),
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
 	charm := s.AddTestingCharm(c, "dummy")
 	placement := instance.Placement{Scope: "lxd"}
 	app, err := s.State.AddApplication(state.AddApplicationArgs{
-		Name:      "dummy",
-		Charm:     charm,
-		NumUnits:  1,
-		Placement: []*instance.Placement{&placement},
-		EndpointBindings: map[string]string{
-			"": specialSpace.Id(),
-		},
+		Name:             "dummy",
+		Charm:            charm,
+		NumUnits:         1,
+		Placement:        []*instance.Placement{&placement},
+		EndpointBindings: bindings,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 

@@ -932,8 +932,11 @@ func (s *JujuConnSuite) AddTestingApplicationWithStorage(c *gc.C, name string, c
 }
 
 func (s *JujuConnSuite) AddTestingApplicationWithBindings(c *gc.C, name string, ch *state.Charm, bindings map[string]string) *state.Application {
+	parsedBindings, err := state.NewBindings(s.State, bindings)
+	c.Assert(err, jc.ErrorIsNil)
+
 	app, err := s.State.AddApplication(state.AddApplicationArgs{
-		Name: name, Charm: ch, Series: ch.URL().Series, EndpointBindings: bindings})
+		Name: name, Charm: ch, Series: ch.URL().Series, EndpointBindings: parsedBindings})
 	c.Assert(err, jc.ErrorIsNil)
 	return app
 }

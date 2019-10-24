@@ -126,8 +126,8 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 		about:        "currentMap overrides defaults, mergeWithMap is nil",
 		mergeWithMap: nil,
 		currentMap: map[string]string{
-			"foo1": s.clientSpace.Id(),
-			"self": s.dbSpace.Id(),
+			"foo1": s.clientSpace.Name(),
+			"self": s.dbSpace.Name(),
 		},
 		meta: s.oldMeta,
 		updated: map[string]string{
@@ -141,15 +141,15 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 	}, {
 		about: "currentMap overrides defaults, mergeWithMap overrides currentMap",
 		mergeWithMap: map[string]string{
-			"":          network.DefaultSpaceId,
-			"foo1":      network.DefaultSpaceId,
-			"self":      s.dbSpace.Id(),
-			"bar1":      s.clientSpace.Id(),
-			"one-extra": s.appsSpace.Id(),
+			"":          network.DefaultSpaceName,
+			"foo1":      network.DefaultSpaceName,
+			"self":      s.dbSpace.Name(),
+			"bar1":      s.clientSpace.Name(),
+			"one-extra": s.appsSpace.Name(),
 		},
 		currentMap: map[string]string{
-			"foo1": s.clientSpace.Id(),
-			"bar1": s.dbSpace.Id(),
+			"foo1": s.clientSpace.Name(),
+			"bar1": s.dbSpace.Name(),
 		},
 		meta: s.oldMeta,
 		updated: map[string]string{
@@ -163,7 +163,7 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 	}, {
 		about: "mergeWithMap overrides defaults, currentMap is nil",
 		mergeWithMap: map[string]string{
-			"self": s.dbSpace.Id(),
+			"self": s.dbSpace.Name(),
 		},
 		currentMap: nil,
 		meta:       s.oldMeta,
@@ -179,9 +179,9 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 		about:        "obsolete entries in currentMap missing in defaults are removed",
 		mergeWithMap: nil,
 		currentMap: map[string]string{
-			"any-old-thing": s.dbSpace.Id(),
-			"self":          s.dbSpace.Id(),
-			"one-extra":     s.appsSpace.Id(),
+			"any-old-thing": s.dbSpace.Name(),
+			"self":          s.dbSpace.Name(),
+			"one-extra":     s.appsSpace.Name(),
 		},
 		meta: s.oldMeta,
 		updated: map[string]string{
@@ -195,9 +195,9 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 	}, {
 		about: "new endpoints use defaults unless specified in mergeWithMap, existing ones are kept",
 		mergeWithMap: map[string]string{
-			"foo2": s.dbSpace.Id(),
-			"me":   s.clientSpace.Id(),
-			"bar3": s.dbSpace.Id(),
+			"foo2": s.dbSpace.Name(),
+			"me":   s.clientSpace.Name(),
+			"bar3": s.dbSpace.Name(),
 		},
 		currentMap: s.copyMap(s.oldDefaults),
 		meta:       s.newMeta,
@@ -218,11 +218,11 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 			"bar3": s.barbSpace.Name(),
 		},
 		currentMap: map[string]string{
-			"":          s.appsSpace.Id(),
-			"foo1":      s.appsSpace.Id(),
-			"bar1":      s.dbSpace.Id(),
+			"":          s.appsSpace.Name(),
+			"foo1":      s.appsSpace.Name(),
+			"bar1":      s.dbSpace.Name(),
 			"self":      "",
-			"one-extra": s.barbSpace.Id(),
+			"one-extra": s.barbSpace.Name(),
 		},
 		meta: s.newMeta,
 		updated: map[string]string{
@@ -231,7 +231,7 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 			"foo2": s.clientSpace.Id(),
 			"bar2": s.clientSpace.Id(),
 			"bar3": s.barbSpace.Id(),
-			"self": "",
+			"self": network.DefaultSpaceId,
 			"me":   s.clientSpace.Id(),
 		},
 		modified: true,
@@ -241,11 +241,11 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 			"self": s.barbSpace.Name(),
 		},
 		currentMap: map[string]string{
-			"":          s.appsSpace.Id(),
-			"foo1":      s.appsSpace.Id(),
-			"bar1":      s.dbSpace.Id(),
+			"":          s.appsSpace.Name(),
+			"foo1":      s.appsSpace.Name(),
+			"bar1":      s.dbSpace.Name(),
 			"self":      "",
-			"one-extra": s.clientSpace.Id(),
+			"one-extra": s.clientSpace.Name(),
 		},
 		meta: s.oldMeta,
 		updated: map[string]string{
@@ -260,18 +260,18 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 		about:        "old unchanged but different key",
 		mergeWithMap: nil,
 		currentMap: map[string]string{
-			"":          s.appsSpace.Id(),
-			"bar1":      s.dbSpace.Id(),
+			"":          s.appsSpace.Name(),
+			"bar1":      s.dbSpace.Name(),
 			"self":      "",
-			"lost":      s.clientSpace.Id(),
-			"one-extra": s.clientSpace.Id(),
+			"lost":      s.clientSpace.Name(),
+			"one-extra": s.clientSpace.Name(),
 		},
 		meta: s.oldMeta,
 		updated: map[string]string{
 			"":          s.appsSpace.Id(),
 			"foo1":      s.appsSpace.Id(),
 			"bar1":      s.dbSpace.Id(),
-			"self":      "",
+			"self":      network.DefaultSpaceId,
 			"one-extra": s.clientSpace.Id(),
 		},
 		modified: true,
@@ -279,7 +279,11 @@ func (s *bindingsSuite) TestMergeBindings(c *gc.C) {
 		c.Logf("test #%d: %s", i, test.about)
 		b, err := state.NewBindings(s.State, test.currentMap)
 		c.Assert(err, jc.ErrorIsNil)
-		isModified, err := b.Merge(test.mergeWithMap, test.meta)
+
+		newb, err := state.NewBindings(s.State, test.mergeWithMap)
+		c.Assert(err, jc.ErrorIsNil)
+
+		isModified, err := b.Merge(newb, test.meta)
 		c.Check(err, jc.ErrorIsNil)
 		c.Check(b.Map(), jc.DeepEquals, test.updated)
 		c.Check(isModified, gc.Equals, test.modified)

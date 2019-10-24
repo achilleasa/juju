@@ -38,7 +38,7 @@ type DeployApplicationParams struct {
 	Storage          map[string]storage.Constraints
 	Devices          map[string]devices.Constraints
 	AttachStorage    []names.StorageTag
-	EndpointBindings map[string]string
+	EndpointBindings *state.Bindings
 	// Resources is a map of resource name to IDs of pending resources.
 	Resources map[string]string
 }

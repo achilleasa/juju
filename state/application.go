@@ -1229,7 +1229,7 @@ type SetCharmConfig struct {
 
 	// EndpointBindings is an operator-defined map of endpoint names to
 	// space names that should be merged with any existing bindings.
-	EndpointBindings map[string]string
+	EndpointBindings *Bindings
 }
 
 // SetCharm changes the charm for the application.
@@ -1430,7 +1430,7 @@ func (a *Application) MergeBindings(operatorBindings *Bindings, force bool) erro
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
-		endpointBindingsOps, err := b.updateOps(txnRevno, operatorBindings.Map(), ch.Meta(), force)
+		endpointBindingsOps, err := b.updateOps(txnRevno, operatorBindings, ch.Meta(), force)
 		if err != nil && !errors.IsNotFound(err) && err != jujutxn.ErrNoOperations {
 			return nil, errors.Trace(err)
 		}

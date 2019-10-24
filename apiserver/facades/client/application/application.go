@@ -676,9 +676,11 @@ func deployApplication(
 		attachStorage[i] = tag
 	}
 
-	bindings, err := state.NewBindings(backend, args.EndpointBindings)
-	if err != nil {
-		return errors.Trace(err)
+	var bindings *state.Bindings
+	if len(args.EndpointBindings) != 0 {
+		if bindings, err = state.NewBindings(backend, args.EndpointBindings); err != nil {
+			return errors.Trace(err)
+		}
 	}
 	_, err = deployApplicationFunc(backend, DeployApplicationParams{
 		ApplicationName:   args.ApplicationName,
@@ -693,7 +695,7 @@ func deployApplication(
 		Storage:           args.Storage,
 		Devices:           args.Devices,
 		AttachStorage:     attachStorage,
-		EndpointBindings:  bindings.Map(),
+		EndpointBindings:  bindings,
 		Resources:         args.Resources,
 	})
 	return errors.Trace(err)
@@ -1071,6 +1073,14 @@ func (api *APIBase) applicationSetCharm(
 			stateStorageConstraints[name] = stateCons
 		}
 	}
+
+	var bindings *state.Bindings
+	if len(params.EndpointBindings) != 0 {
+		if bindings, err = state.NewBindings(api.backend, params.EndpointBindings); err != nil {
+			return errors.Annotate(err, "parsing endpoint bindings")
+		}
+	}
+
 	force := params.Force
 	cfg := state.SetCharmConfig{
 		Charm:              api.stateCharm(stateCharm),
@@ -1081,7 +1091,7 @@ func (api *APIBase) applicationSetCharm(
 		Force:              force.Force,
 		ResourceIDs:        params.ResourceIDs,
 		StorageConstraints: stateStorageConstraints,
-		EndpointBindings:   params.EndpointBindings,
+		EndpointBindings:   bindings,
 	}
 	return params.Application.SetCharm(cfg)
 }

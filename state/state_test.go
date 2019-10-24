@@ -1807,21 +1807,24 @@ func (s *StateSuite) TestAddApplicationWithSpecifiedBindings(c *gc.C) {
 	clientSpace, err := s.State.AddSpace("client", "", nil, true)
 	c.Assert(err, jc.ErrorIsNil)
 
+	bindings, err := state.NewBindings(s.State, map[string]string{
+		"client":  clientSpace.Name(),
+		"cluster": dbSpace.Name(),
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
 	// Specify some bindings, but not all when adding the application.
 	ch := s.AddMetaCharm(c, "mysql", metaBase, 43)
 	app, err := s.State.AddApplication(state.AddApplicationArgs{
-		Name:  "yoursql",
-		Charm: ch,
-		EndpointBindings: map[string]string{
-			"client":  clientSpace.Id(),
-			"cluster": dbSpace.Id(),
-		},
+		Name:             "yoursql",
+		Charm:            ch,
+		EndpointBindings: bindings,
 	})
 	c.Assert(err, jc.ErrorIsNil)
 
 	// Read them back to verify defaults and given bindings got merged as
 	// expected.
-	bindings, err := app.EndpointBindings()
+	bindings, err = app.EndpointBindings()
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(bindings.Map(), jc.DeepEquals, map[string]string{
 		"":        network.DefaultSpaceId,
@@ -1844,43 +1847,31 @@ func (s *StateSuite) TestAddApplicationWithInvalidBindings(c *gc.C) {
 		bindings      map[string]string
 		expectedError string
 		errorType     func(error) bool
-	}{{ // 0
-		about:         "extra endpoint bound to unknown space",
-		bindings:      map[string]string{"extra": "4"},
-		expectedError: `space not found`,
-		errorType:     errors.IsNotFound,
-	}, { // 1
+	}{{ // 1
 		about:         "extra endpoint not bound to a space",
 		bindings:      map[string]string{"extra": ""},
 		expectedError: `unknown endpoint "extra" not valid`,
 		errorType:     errors.IsNotValid,
 	}, { // 2
 		about:         "two extra endpoints, both bound to known spaces",
-		bindings:      map[string]string{"ex1": dbSpace.Id(), "ex2": clientSpace.Id()},
+		bindings:      map[string]string{"ex1": dbSpace.Name(), "ex2": clientSpace.Name()},
 		expectedError: `unknown endpoint "ex(1|2)" not valid`,
 		errorType:     errors.IsNotValid,
-	}, { // 3
-		about:         "empty endpoint bound to unknown space",
-		bindings:      map[string]string{"": "anything"},
-		expectedError: `space not found`,
-		errorType:     errors.IsNotFound,
-	}, { // 4
-		about:         "known endpoint bound to unknown space",
-		bindings:      map[string]string{"server": "invalid"},
-		expectedError: `space not found`,
-		errorType:     errors.IsNotFound,
 	}, { // 5
 		about:         "known endpoint bound correctly and an extra endpoint",
-		bindings:      map[string]string{"server": dbSpace.Id(), "foo": "public"},
+		bindings:      map[string]string{"server": dbSpace.Name(), "foo": "public"},
 		expectedError: `space not found`,
 		errorType:     errors.IsNotFound,
 	}} {
 		c.Logf("test #%d: %s", i, test.about)
 
-		_, err := s.State.AddApplication(state.AddApplicationArgs{
+		bindings, err := state.NewBindings(s.State, test.bindings)
+		c.Assert(err, jc.ErrorIsNil)
+
+		_, err = s.State.AddApplication(state.AddApplicationArgs{
 			Name:             "yoursql",
 			Charm:            charm,
-			EndpointBindings: test.bindings,
+			EndpointBindings: bindings,
 		})
 		c.Check(err, gc.ErrorMatches, `cannot add application "yoursql": `+test.expectedError)
 		c.Check(err, jc.Satisfies, test.errorType)

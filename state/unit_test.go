@@ -2315,14 +2315,17 @@ func (s *UnitSuite) TestWatchMachineAndEndpointAddressesHash(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	wc.AssertChange("46ed851765a963e100161210a7b4fbb28d59b24edb580a60f86dbbaebea14d37")
 
+	bindings, err := state.NewBindings(s.State, map[string]string{
+		"server": "private",
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
 	// Changing the application bindings after an upgrade should trigger a change
 	sch := s.AddMetaCharm(c, "mysql", metaExtraEndpoints, 2)
 	cfg := state.SetCharmConfig{
-		Charm:      sch,
-		ForceUnits: true,
-		EndpointBindings: map[string]string{
-			"server": "private",
-		},
+		Charm:            sch,
+		ForceUnits:       true,
+		EndpointBindings: bindings,
 	}
 	err = app.SetCharm(cfg)
 	c.Assert(err, jc.ErrorIsNil)

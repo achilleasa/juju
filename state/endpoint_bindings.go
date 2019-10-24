@@ -81,15 +81,11 @@ func (b bindingsMap) GetBSON() (interface{}, error) {
 // Current values and mergeWith are both optional and will ignored when
 // empty. The current object contains the combined finalized bindings.
 // Returns true/false if there are any actual differences.
-func (b *Bindings) Merge(mergeWith map[string]string, meta *charm.Meta) (bool, error) {
-	// Verify the bindings to be merged, and ensure we're merging with
-	// space ids.
-	merge, err := NewBindings(b.st, mergeWith)
-	if err != nil {
-		return false, errors.Trace(err)
+func (b *Bindings) Merge(mergeWith *Bindings, meta *charm.Meta) (bool, error) {
+	var mergeMap map[string]string
+	if mergeWith != nil {
+		mergeMap = mergeWith.Map()
 	}
-	mergeMap := merge.Map()
-
 	defaultsMap := DefaultEndpointBindingsForCharm(meta)
 
 	defaultBinding, mergeOK := b.bindingsMap[defaultEndpointName]
@@ -158,14 +154,9 @@ func (b *Bindings) Merge(mergeWith map[string]string, meta *charm.Meta) (bool, e
 // createOp returns the op needed to create new endpoint bindings using the
 // optional current bindings and the specified charm metadata to for
 // determining defaults and to validate the effective bindings.
-func (b *Bindings) createOp(bindings map[string]string, meta *charm.Meta) (txn.Op, error) {
+func (b *Bindings) createOp(meta *charm.Meta) (txn.Op, error) {
 	if b.app == nil {
 		return txn.Op{}, errors.Trace(errors.New("programming error: app is a nil pointer"))
-	}
-	// No existing map to Merge, just use the defaults.
-	_, err := b.Merge(bindings, meta)
-	if err != nil {
-		return txn.Op{}, errors.Trace(err)
 	}
 
 	// Validate the bindings before inserting.
@@ -199,7 +190,7 @@ func (b *Bindings) createOp(bindings map[string]string, meta *charm.Meta) (txn.O
 // - assert that the spaces we are binding to have not been deleted.
 // - assert that the existing bindings we used for calculating the merged set
 //   of bindings have not changed while the txn is in progress.
-func (b *Bindings) updateOps(txnRevno int64, newMap map[string]string, newMeta *charm.Meta, force bool) ([]txn.Op, error) {
+func (b *Bindings) updateOps(txnRevno int64, newBindings *Bindings, newMeta *charm.Meta, force bool) ([]txn.Op, error) {
 	var ops []txn.Op
 
 	if b.app == nil {
@@ -209,7 +200,7 @@ func (b *Bindings) updateOps(txnRevno int64, newMap map[string]string, newMeta *
 	useTxnRevno := len(b.bindingsMap) > 0
 
 	// Merge existing with new as needed.
-	isModified, err := b.Merge(newMap, newMeta)
+	isModified, err := b.Merge(newBindings, newMeta)
 	if err != nil {
 		return ops, errors.Trace(err)
 	}
@@ -509,8 +500,8 @@ func allOfOne(currentSpaces, givenMap map[string]string) error {
 func newBindingsFromNames(verificationMap, givenMap map[string]string) (map[string]string, error) {
 	newMap := make(map[string]string, len(givenMap))
 	for epName, name := range givenMap {
-		if name == "" {
-			newMap[epName] = ""
+		if name == network.DefaultSpaceName {
+			newMap[epName] = network.DefaultSpaceId
 			continue
 		}
 		// check that the name is valid and get id.
