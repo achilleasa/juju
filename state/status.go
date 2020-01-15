@@ -495,6 +495,16 @@ func removeStatusOp(mb modelBackend, globalKey string) txn.Op {
 	}
 }
 
+// removeStateOp returns the operation needed to remove the unit state
+// document associated with the given globalKey.
+func removeStateOp(mb modelBackend, globalKey string) txn.Op {
+	return txn.Op{
+		C:      unitStatesC,
+		Id:     mb.docID(globalKey),
+		Remove: true,
+	}
+}
+
 // globalKeyField must have the same value as the tag for
 // historicalStatusDoc.GlobalKey.
 const globalKeyField = "globalkey"
