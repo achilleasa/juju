@@ -330,8 +330,11 @@ func Parse(args ...string) (Value, error) {
 func ParseWithAliases(args ...string) (cons Value, aliases map[string]string, err error) {
 	aliases = make(map[string]string)
 	for _, arg := range args {
+		// Replace '\ ' with a null byte so we can safely split on remaining spaces
+		arg = strings.Replace(arg, `\ `, "\x00", -1)
 		raws := strings.Split(strings.TrimSpace(arg), " ")
 		for _, raw := range raws {
+			raw = strings.TrimSpace(strings.Replace(raw, "\x00", " ", -1))
 			if raw == "" {
 				continue
 			}

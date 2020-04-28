@@ -308,6 +308,9 @@ var parseConstraintsTests = []struct {
 	}, {
 		summary: "instance type empty",
 		args:    []string{"instance-type="},
+	}, {
+		summary: "instance type with escaped spaces",
+		args:    []string{`instance-type=foo\ `},
 	},
 
 	// "virt-type" in detail.
@@ -424,6 +427,16 @@ func (s *ConstraintsSuite) TestParseMissingTagsAndSpaces(c *gc.C) {
 	con := constraints.MustParse("arch=amd64 mem=4G cores=1 root-disk=8G")
 	c.Check(con.Tags, gc.IsNil)
 	c.Check(con.Spaces, gc.IsNil)
+}
+
+func (s *ConstraintsSuite) TestParseInstanceTypeWithEscapedSpaces(c *gc.C) {
+	con := constraints.MustParse(`arch=amd64 instance-type=with\ spaces cores=1`)
+	c.Check(con.HasArch(), jc.IsTrue)
+	c.Check(*con.Arch, gc.Equals, "amd64")
+	c.Check(con.HasInstanceType(), jc.IsTrue)
+	c.Check(*con.InstanceType, gc.Equals, "with spaces")
+	c.Check(con.HasCpuCores(), jc.IsTrue)
+	c.Check(*con.CpuCores, gc.Equals, uint64(1))
 }
 
 func (s *ConstraintsSuite) TestParseNoTagsNoSpaces(c *gc.C) {
